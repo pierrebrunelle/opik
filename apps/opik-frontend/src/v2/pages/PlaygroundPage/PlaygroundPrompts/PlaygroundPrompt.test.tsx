@@ -9,9 +9,11 @@ import {
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
 const PROVIDER_ROWS: Record<string, COMPOSED_PROVIDER_TYPE> = {
@@ -47,6 +49,7 @@ const PROVIDER_KEY_MODELS = mapValues(
 );
 
 let prompt: PlaygroundPromptType;
+let permissions: Record<string, boolean> = {};
 const updatePrompt = vi.fn();
 
 vi.mock("@/store/PlaygroundStore", () => ({
@@ -82,7 +85,7 @@ vi.mock("@/store/AppStore", () => ({
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
-  usePermissions: () => ({ permissions: {} }),
+  usePermissions: () => ({ permissions }),
 }));
 
 vi.mock("@/hooks/useLastPickedModel", () => ({
@@ -159,30 +162,32 @@ const USER_CONFIGS = {
   maxConcurrentRequests: 5,
 } as LLMPromptConfigsType;
 
-const renderPrompt = (model: string) => {
+const renderPrompt = (model: string, messages: LLMMessage[] = []) => {
   prompt = {
     id: "prompt-a",
     name: "Prompt",
     model: model as PROVIDER_MODEL_TYPE,
     provider: PROVIDER_ROWS[model],
     configs: USER_CONFIGS,
-    messages: [],
+    messages,
   } as unknown as PlaygroundPromptType;
 
   render(
-    <PlaygroundPrompt
-      workspaceName="default"
-      index={0}
-      promptId="prompt-a"
-      providerKeys={Object.values(PROVIDER_ROWS)}
-      hasLoadedProviderKeys={false}
-      hasRegistryModels={false}
-      providerResolver={
-        renderHook(() => useLLMProviderModelsData()).result.current
-          .calculateModelProvider
-      }
-      modelResolver={vi.fn()}
-    />,
+    <TooltipProvider>
+      <PlaygroundPrompt
+        workspaceName="default"
+        index={0}
+        promptId="prompt-a"
+        providerKeys={Object.values(PROVIDER_ROWS)}
+        hasLoadedProviderKeys={false}
+        hasRegistryModels={false}
+        providerResolver={
+          renderHook(() => useLLMProviderModelsData()).result.current
+            .calculateModelProvider
+        }
+        modelResolver={vi.fn()}
+      />
+    </TooltipProvider>,
   );
 };
 
@@ -193,6 +198,7 @@ const savedConfigs = () => updatePrompt.mock.lastCall?.[1].configs;
 
 beforeEach(() => {
   updatePrompt.mockClear();
+  permissions = {};
 });
 
 describe("PlaygroundPrompt model switch", () => {
@@ -238,5 +244,61 @@ describe("PlaygroundPrompt model switch", () => {
         to as PROVIDER_MODEL_TYPE,
       ),
     );
+  });
+});
+
+const message = (role: LLM_MESSAGE_ROLE, content: string): LLMMessage => ({
+  id: `${role}-${content}`,
+  role,
+  content,
+});
+
+describe("PlaygroundPrompt save button", () => {
+  beforeEach(() => {
+    permissions = { canCreatePrompts: true };
+  });
+
+  const saveButton = () => screen.getByTestId("playground-save-prompt-button");
+
+  it.each([
+    [
+      "a message is empty",
+      [
+        message(LLM_MESSAGE_ROLE.system, "Be brief."),
+        message(LLM_MESSAGE_ROLE.user, ""),
+      ],
+    ],
+    [
+      "every message is empty",
+      [
+        message(LLM_MESSAGE_ROLE.system, ""),
+        message(LLM_MESSAGE_ROLE.user, ""),
+      ],
+    ],
+  ])("is shown but disabled when %s", (_label, messages) => {
+    renderPrompt("gpt-4o-mini", messages);
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it.each([
+    [
+      "every message has text",
+      [
+        message(LLM_MESSAGE_ROLE.system, "Be brief."),
+        message(LLM_MESSAGE_ROLE.user, "Hi"),
+      ],
+    ],
+    [
+      "only an unused system message is empty",
+      [
+        message(LLM_MESSAGE_ROLE.system, ""),
+        message(LLM_MESSAGE_ROLE.user, "Hi"),
+      ],
+    ],
+  ])("is enabled when %s", (_label, messages) => {
+    renderPrompt("gpt-4o-mini", messages);
+
+    expect(saveButton()).toBeEnabled();
   });
 });

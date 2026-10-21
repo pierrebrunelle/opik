@@ -19,6 +19,7 @@ import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
 import {
+  canRunMessages,
   getDefaultConfigByProvider,
   restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
@@ -57,6 +58,7 @@ import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/A
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
@@ -173,11 +175,7 @@ const PlaygroundPrompt = ({
     [datasetVariables],
   );
 
-  const hasMessageContent = messages.some((msg) =>
-    typeof msg.content === "string"
-      ? msg.content.trim()
-      : Array.isArray(msg.content) && msg.content.length > 0,
-  );
+  const canSaveMessages = canRunMessages(messages);
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -474,27 +472,30 @@ const PlaygroundPrompt = ({
           )}
 
           <div className="flex shrink-0 items-center">
-            {hasMessageContent &&
-              (selectedChatPromptId
-                ? canEditPrompts || canCreatePrompts
-                : canCreatePrompts) && (
-                <TooltipWrapper
-                  content={
-                    hasUnsavedChatPromptChanges
+            {(selectedChatPromptId
+              ? canEditPrompts || canCreatePrompts
+              : canCreatePrompts) && (
+              <TooltipWrapper
+                content={
+                  !canSaveMessages
+                    ? PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP
+                    : hasUnsavedChatPromptChanges
                       ? PROMPT_UNSAVED_TOOLTIP
                       : PROMPT_SAVE_AS_CHAT_TOOLTIP
-                  }
+                }
+              >
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleSaveChatPrompt}
+                  disabled={!canSaveMessages}
+                  style={!canSaveMessages ? { pointerEvents: "auto" } : {}}
+                  data-testid="playground-save-prompt-button"
                 >
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={handleSaveChatPrompt}
-                    data-testid="playground-save-prompt-button"
-                  >
-                    <Save />
-                  </Button>
-                </TooltipWrapper>
-              )}
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
 
             {promptCount > 1 && (
               <>
